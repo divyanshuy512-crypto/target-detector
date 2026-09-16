@@ -11,13 +11,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract Project Files & Fix Structure
+      - name: Extract Project Files & Flatten
         run: |
           unzip -o *.zip || true
-          # Agar zip ke andar folder bana hai toh files ko root par move karega
-          if [ -d "target-detector-fabric"* ]; then
-            cp -r target-detector-fabric*/* . || true
-          fi
+          # Subfolder se saari files root par shift karna
+          find . -maxdepth 2 -name "gradlew" -execdir cp -r ./* $GITHUB_WORKSPACE/ \; || true
+          chmod +x gradlew || true
 
       - name: Update Target Version to 1.21.11
         run: |
