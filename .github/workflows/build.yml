@@ -11,10 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unzip Source
+      - name: Extract and Setup Project
         run: |
-          unzip target-detector-fabric-1.21.11.zip
-          cp -r target-detector-fabric-1.21.11/* . 2>/dev/null || true
+          unzip -o *.zip
+          find . -maxdepth 2 -name "gradlew" -exec cp -r {}/../* . \;
+          chmod +x gradlew
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -25,9 +26,6 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Make gradlew executable
-        run: chmod +x gradlew
-
       - name: Build with Gradle
         run: ./gradlew build
 
@@ -36,4 +34,3 @@ jobs:
         with:
           name: target-detector-mod
           path: build/libs/*.jar
-          
