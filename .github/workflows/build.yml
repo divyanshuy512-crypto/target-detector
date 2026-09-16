@@ -11,67 +11,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract Project Files
+      - name: Extract Project Files & Fix Structure
         run: |
           unzip -o *.zip || true
-          find . -maxdepth 2 -name "build.gradle*" -exec cp -r {}/../* . \; 2>/dev/null || true
+          # Agar zip ke andar folder bana hai toh files ko root par move karega
+          if [ -d "target-detector-fabric"* ]; then
+            cp -r target-detector-fabric*/* . || true
+          fi
 
-      - name: Patch Settings Repository Mode
+      - name: Update Target Version to 1.21.11
         run: |
-          sed -i 's/PREFER_SETTINGS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
-          sed -i 's/FAIL_ON_PROJECT_REPOS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
-
-      - name: Overwrite TargetDetectorClient File
-        run: |
-          python3 -c "
-          import os, glob
-
-          content = '''package com.example.targetdetector;
-
-          import net.fabricmc.api.ClientModInitializer;
-          import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
-          import net.minecraft.client.MinecraftClient;
-          import net.minecraft.client.gui.DrawContext;
-          import net.minecraft.entity.Entity;
-          import net.minecraft.entity.player.PlayerEntity;
-          import net.minecraft.text.Text;
-
-          public class TargetDetectorClient implements ClientModInitializer {
-
-              @Override
-              public void onInitializeClient() {
-                  HudRenderCallback.EVENT.register((context, tickCounter) -> {
-                      renderHud(context, 0.0f);
-                  });
-              }
-
-              private void renderHud(DrawContext ctx, float tickDelta) {
-                  MinecraftClient client = MinecraftClient.getInstance();
-                  if (client.player == null || client.world == null) return;
-
-                  Entity target = client.targetedEntity;
-
-                  if (target != null) {
-                      int y = 10;
-                      ctx.drawText(client.textRenderer, Text.literal(\"Target: \" + target.getName().getString()), 10, y, 0xFFFFFF, false);
-                      y += 10;
-                      ctx.drawText(client.textRenderer, Text.literal(\"Type: \" + target.getType().getName().getString()), 10, y, 0xAAAAAA, false);
-                      y += 10;
-                      if (target instanceof PlayerEntity) {
-                          PlayerEntity player = (PlayerEntity) target;
-                          ctx.drawText(client.textRenderer, Text.literal(\"Health: \" + (int) player.getHealth() + \"/\" + (int) player.getMaxHealth()), 10, y, 0xFF5555, false);
-                      }
-                  }
-              }
-          }
-          '''
-
-          files = glob.glob('**/TargetDetectorClient.java', recursive=True)
-          if files:
-              with open(files[0], 'w') as f:
-                  f.write(content)
-              print(f'Successfully updated {files[0]}')
-          "
+          sed -i 's/1.20.1/1.21.11/g' build.gradle || true
+          sed -i 's/0.83.0+1.20.1/0.104.0+1.21.11/g' build.gradle || true
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -81,13 +32,11 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '9.2.0'
 
-      - name: Build Mod
-        run: gradle build --no-daemon
+      - name: Build with Gradle
+        run: ./gradlew build
 
-      - name: Upload Mod Jar
+      - name: Upload Mod Artifact
         uses: actions/upload-artifact@v4
         with:
           name: target-detector-mod
