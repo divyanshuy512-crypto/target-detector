@@ -21,38 +21,56 @@ jobs:
           sed -i 's/PREFER_SETTINGS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
           sed -i 's/FAIL_ON_PROJECT_REPOS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
 
-      - name: Fix Java Code via Robust Python Script
+      - name: Overwrite TargetDetectorClient File
         run: |
           python3 -c "
-          import os, glob, re
+          import os, glob
+
+          content = '''package com.example.targetdetector;
+
+          import net.fabricmc.api.ClientModInitializer;
+          import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+          import net.minecraft.client.MinecraftClient;
+          import net.minecraft.client.gui.DrawContext;
+          import net.minecraft.entity.Entity;
+          import net.minecraft.entity.player.PlayerEntity;
+          import net.minecraft.text.Text;
+
+          public class TargetDetectorClient implements ClientModInitializer {
+
+              @Override
+              public void onInitializeClient() {
+                  HudRenderCallback.EVENT.register((context, tickCounter) -> {
+                      renderHud(context, 0.0f);
+                  });
+              }
+
+              private void renderHud(DrawContext ctx, float tickDelta) {
+                  MinecraftClient client = MinecraftClient.getInstance();
+                  if (client.player == null || client.world == null) return;
+
+                  Entity target = client.targetedEntity;
+
+                  if (target != null) {
+                      int y = 10;
+                      ctx.drawText(client.textRenderer, Text.literal(\"Target: \" + target.getName().getString()), 10, y, 0xFFFFFF, false);
+                      y += 10;
+                      ctx.drawText(client.textRenderer, Text.literal(\"Type: \" + target.getType().getName().getString()), 10, y, 0xAAAAAA, false);
+                      y += 10;
+                      if (target instanceof PlayerEntity) {
+                          PlayerEntity player = (PlayerEntity) target;
+                          ctx.drawText(client.textRenderer, Text.literal(\"Health: \" + (int) player.getHealth() + \"/\" + (int) player.getMaxHealth()), 10, y, 0xFF5555, false);
+                      }
+                  }
+              }
+          }
+          '''
 
           files = glob.glob('**/TargetDetectorClient.java', recursive=True)
           if files:
-              target_file = files[0]
-              print(f'Patching {target_file}')
-              with open(target_file, 'r') as f:
-                  code = f.read()
-
-              # Convert legacy client text renderer calls
-              code = re.sub(r'client\.textRenderer\.draw\s*\(', 'ctx.drawText(client.textRenderer, ', code)
-              
-              # Fix drawText parameter signatures (ensure 6 parameters: renderer, text, x, y, color, shadow)
-              # Match drawText(...) calls missing the boolean parameter
-              def fix_draw_text(match):
-                  call_content = match.group(1)
-                  # If missing shadow parameter (5 args total), append shadow boolean ', false'
-                  parts = call_content.split(',')
-                  if len(parts) == 5:
-                      return f'drawText({call_content}, false)'
-                  return match.group(0)
-
-              code = re.sub(r'drawText\(([^;\)]+)\)', fix_draw_text, code)
-              
-              # Fix HudRenderCallback signature mismatch for newer Fabric Loom
-              code = code.replace('HudRenderCallback.EVENT.register(this::renderHud);', 'HudRenderCallback.EVENT.register((context, tickCounter) -> renderHud(context, 0.0f));')
-
-              with open(target_file, 'w') as f:
-                  f.write(code)
+              with open(files[0], 'w') as f:
+                  f.write(content)
+              print(f'Successfully updated {files[0]}')
           "
 
       - name: Set up JDK 21
@@ -74,4 +92,3 @@ jobs:
         with:
           name: target-detector-mod
           path: build/libs/*.jar
-
