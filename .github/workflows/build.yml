@@ -21,10 +21,10 @@ jobs:
           sed -i 's/PREFER_SETTINGS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
           sed -i 's/FAIL_ON_PROJECT_REPOS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
 
-      - name: Fix Java Code via Python
+      - name: Fix Java Code via Robust Python Script
         run: |
           python3 -c "
-          import os, glob
+          import os, glob, re
 
           files = glob.glob('**/TargetDetectorClient.java', recursive=True)
           if files:
@@ -33,28 +33,26 @@ jobs:
               with open(target_file, 'r') as f:
                   code = f.read()
 
-              # Replace old draw calls with modern drawText parameter with shadow boolean
-              code = code.replace('client.textRenderer.draw(ctx,', 'ctx.drawText(client.textRenderer,')
-              code = code.replace('client.textRenderer.draw(context,', 'context.drawText(client.textRenderer,')
+              # Convert legacy client text renderer calls
+              code = re.sub(r'client\.textRenderer\.draw\s*\(', 'ctx.drawText(client.textRenderer, ', code)
               
-              # Fix drawText parameter list by adding boolean parameter if missing
-              code = code.replace('Text.literal(', 'Text.literal(')
+              # Fix drawText parameter signatures (ensure 6 parameters: renderer, text, x, y, color, shadow)
+              # Match drawText(...) calls missing the boolean parameter
+              def fix_draw_text(match):
+                  call_content = match.group(1)
+                  # If missing shadow parameter (5 args total), append shadow boolean ', false'
+                  parts = call_content.split(',')
+                  if len(parts) == 5:
+                      return f'drawText({call_content}, false)'
+                  return match.group(0)
+
+              code = re.sub(r'drawText\(([^;\)]+)\)', fix_draw_text, code)
               
-              # Replace method signature for RenderTickCounter / float
-              code = code.replace('float tickDelta', 'float tickDelta')
+              # Fix HudRenderCallback signature mismatch for newer Fabric Loom
               code = code.replace('HudRenderCallback.EVENT.register(this::renderHud);', 'HudRenderCallback.EVENT.register((context, tickCounter) -> renderHud(context, 0.0f));')
-              
-              # Ensure drawText has 6 parameters (TextRenderer, Text, x, y, color, shadow)
-              lines = code.splitlines()
-              new_lines = []
-              for line in lines:
-                  if 'ctx.drawText(' in line or 'context.drawText(' in line:
-                      if line.strip().endswith(');') and line.count(',') == 4:
-                          line = line[:-2] + ', false);'
-                  new_lines.append(line)
-              
+
               with open(target_file, 'w') as f:
-                  f.write('\n'.join(new_lines))
+                  f.write(code)
           "
 
       - name: Set up JDK 21
@@ -76,4 +74,4 @@ jobs:
         with:
           name: target-detector-mod
           path: build/libs/*.jar
-          
+
