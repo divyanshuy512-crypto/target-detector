@@ -21,6 +21,20 @@ jobs:
           sed -i 's/PREFER_SETTINGS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
           sed -i 's/FAIL_ON_PROJECT_REPOS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
 
+      - name: Patch Java Code API Breaking Changes
+        run: |
+          CLIENT_FILE=$(find src/ -name "TargetDetectorClient.java" 2>/dev/null | head -n 1)
+          if [ -n "$CLIENT_FILE" ]; then
+            echo "Patching $CLIENT_FILE..."
+            # Fix HudRenderCallback signature (RenderTickCounter -> float)
+            sed -i 's/void renderHud(DrawContext \([^,]*\), float \([^)]*\))/void renderHud(DrawContext \1, net.minecraft.client.render.RenderTickCounter \2)/g' "$CLIENT_FILE"
+            sed -i 's/this::renderHud/(context, tickCounter) -> renderHud(context, tickCounter.getTickProgress(true))/g' "$CLIENT_FILE"
+            
+            # Fix client.textRenderer.draw -> context.drawText
+            sed -i 's/client\.textRenderer\.draw(\s*ctx\s*,/ctx.drawText(client.textRenderer,/g' "$CLIENT_FILE"
+            sed -i 's/client\.textRenderer\.draw(\s*context\s*,/context.drawText(client.textRenderer,/g' "$CLIENT_FILE"
+          fi
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
