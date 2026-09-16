@@ -12,7 +12,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Unzip Source
-        run: unzip target-detector-fabric-1.21.11.zip
+        run: |
+          unzip target-detector-fabric-1.21.11.zip
+          cp -r target-detector-fabric-1.21.11/* . 2>/dev/null || true
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -34,3 +36,4 @@ jobs:
         with:
           name: target-detector-mod
           path: build/libs/*.jar
+          
