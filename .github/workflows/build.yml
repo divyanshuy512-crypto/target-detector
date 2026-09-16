@@ -11,12 +11,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract Project Files & Flatten
+      - name: Extract Zip Content
         run: |
-          unzip -o *.zip || true
-          # Subfolder se saari files root par shift karna
-          find . -maxdepth 2 -name "gradlew" -execdir cp -r ./* $GITHUB_WORKSPACE/ \; || true
-          chmod +x gradlew || true
+          unzip -o *.zip
+          # Clean root copy logic
+          shopt -s dotglob
+          SUBDIR=$(find . -mindepth 1 -maxdepth 1 -type d ! -name ".git" ! -name ".github" | head -n 1)
+          if [ -n "$SUBDIR" ]; then
+            cp -rn "$SUBDIR"/* . || true
+          fi
+          chmod +x gradlew
 
       - name: Update Target Version to 1.21.11
         run: |
