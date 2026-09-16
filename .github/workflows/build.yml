@@ -21,19 +21,41 @@ jobs:
           sed -i 's/PREFER_SETTINGS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
           sed -i 's/FAIL_ON_PROJECT_REPOS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
 
-      - name: Patch Java Code API Breaking Changes
+      - name: Fix Java Code via Python
         run: |
-          CLIENT_FILE=$(find src/ -name "TargetDetectorClient.java" 2>/dev/null | head -n 1)
-          if [ -n "$CLIENT_FILE" ]; then
-            echo "Patching $CLIENT_FILE..."
-            # Fix HudRenderCallback signature (RenderTickCounter -> float)
-            sed -i 's/void renderHud(DrawContext \([^,]*\), float \([^)]*\))/void renderHud(DrawContext \1, net.minecraft.client.render.RenderTickCounter \2)/g' "$CLIENT_FILE"
-            sed -i 's/this::renderHud/(context, tickCounter) -> renderHud(context, tickCounter.getTickProgress(true))/g' "$CLIENT_FILE"
-            
-            # Fix client.textRenderer.draw -> context.drawText
-            sed -i 's/client\.textRenderer\.draw(\s*ctx\s*,/ctx.drawText(client.textRenderer,/g' "$CLIENT_FILE"
-            sed -i 's/client\.textRenderer\.draw(\s*context\s*,/context.drawText(client.textRenderer,/g' "$CLIENT_FILE"
-          fi
+          python3 -c "
+          import os, glob
+
+          files = glob.glob('**/TargetDetectorClient.java', recursive=True)
+          if files:
+              target_file = files[0]
+              print(f'Patching {target_file}')
+              with open(target_file, 'r') as f:
+                  code = f.read()
+
+              # Replace old draw calls with modern drawText parameter with shadow boolean
+              code = code.replace('client.textRenderer.draw(ctx,', 'ctx.drawText(client.textRenderer,')
+              code = code.replace('client.textRenderer.draw(context,', 'context.drawText(client.textRenderer,')
+              
+              # Fix drawText parameter list by adding boolean parameter if missing
+              code = code.replace('Text.literal(', 'Text.literal(')
+              
+              # Replace method signature for RenderTickCounter / float
+              code = code.replace('float tickDelta', 'float tickDelta')
+              code = code.replace('HudRenderCallback.EVENT.register(this::renderHud);', 'HudRenderCallback.EVENT.register((context, tickCounter) -> renderHud(context, 0.0f));')
+              
+              # Ensure drawText has 6 parameters (TextRenderer, Text, x, y, color, shadow)
+              lines = code.splitlines()
+              new_lines = []
+              for line in lines:
+                  if 'ctx.drawText(' in line or 'context.drawText(' in line:
+                      if line.strip().endswith(');') and line.count(',') == 4:
+                          line = line[:-2] + ', false);'
+                  new_lines.append(line)
+              
+              with open(target_file, 'w') as f:
+                  f.write('\n'.join(new_lines))
+          "
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
