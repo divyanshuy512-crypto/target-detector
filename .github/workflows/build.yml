@@ -29,7 +29,7 @@ jobs:
           sed -i 's/PREFER_SETTINGS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
           sed -i 's/FAIL_ON_PROJECT_REPOS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
 
-      # 4. Overwrite TargetDetectorClient (Fixed for Minecraft 1.21.11)
+      # 4. Overwrite TargetDetectorClient File with Z Key Toggle
       - name: Overwrite TargetDetectorClient File
         run: |
           python3 -c "
@@ -38,40 +38,69 @@ jobs:
           content = '''package com.example.targetdetector;
 
           import net.fabricmc.api.ClientModInitializer;
-          import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+          import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+          import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
           import net.minecraft.client.MinecraftClient;
-          import net.minecraft.client.gui.DrawContext;
+          import net.minecraft.client.option.KeyBinding;
+          import net.minecraft.client.util.InputUtil;
           import net.minecraft.entity.Entity;
-          import net.minecraft.entity.player.PlayerEntity;
+          import net.minecraft.entity.LivingEntity;
           import net.minecraft.text.Text;
-          import net.minecraft.client.render.RenderTickCounter;
+          import net.minecraft.util.Formatting;
+          import net.minecraft.util.Hand;
+          import net.minecraft.util.hit.EntityHitResult;
+          import net.minecraft.util.hit.HitResult;
+          import org.lwjgl.glfw.GLFW;
 
           public class TargetDetectorClient implements ClientModInitializer {
 
+              private static KeyBinding toggleKey;
+              private boolean enabled = false;
+
               @Override
               public void onInitializeClient() {
-                  HudRenderCallback.EVENT.register((context, tickCounter) -> {
-                      renderHud(context, tickCounter);
-                  });
-              }
+                  toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                          \"Toggle Triggerbot\",
+                          InputUtil.Type.KEYSYM,
+                          GLFW.GLFW_KEY_Z,
+                          \"Triggerbot Mod\"
+                  ));
 
-              private void renderHud(DrawContext ctx, RenderTickCounter tickCounter) {
-                  MinecraftClient client = MinecraftClient.getInstance();
-                  if (client.player == null || client.world == null) return;
+                  ClientTickEvents.END_CLIENT_TICK.register(client -> {
+                      if (client.player == null || client.world == null) return;
 
-                  Entity target = client.targetedEntity;
-
-                  if (target != null) {
-                      int y = 10;
-                      ctx.drawText(client.textRenderer, Text.literal(\"Target: \" + target.getName().getString()), 10, y, 0xFFFFFF, false);
-                      y += 10;
-                      ctx.drawText(client.textRenderer, Text.literal(\"Type: \" + target.getType().getName().getString()), 10, y, 0xAAAAAA, false);
-                      y += 10;
-                      if (target instanceof PlayerEntity) {
-                          PlayerEntity player = (PlayerEntity) target;
-                          ctx.drawText(client.textRenderer, Text.literal(\"Health: \" + (int) player.getHealth() + \"/\" + (int) player.getMaxHealth()), 10, y, 0xFF5555, false);
+                      // Check for Key Press Toggle
+                      while (toggleKey.wasPressed()) {
+                          enabled = !enabled;
+                          client.player.sendMessage(
+                                  Text.literal(\"Triggerbot: \" + (enabled ? \"ENABLED\" : \"DISABLED\"))
+                                          .formatted(enabled ? Formatting.GREEN : Formatting.RED),
+                                  true
+                          );
                       }
-                  }
+
+                      // Triggerbot Logic
+                      if (enabled && client.interactionManager != null) {
+                          HitResult hitResult = client.crosshairTarget;
+
+                          if (hitResult != null && hitResult.getType() == HitResult.Type.ENTITY) {
+                              Entity target = ((EntityHitResult) hitResult).getEntity();
+
+                              if (target instanceof LivingEntity && target.isAlive()) {
+                                  double distanceSq = client.player.squaredDistanceTo(target);
+
+                                  // 4 Blocks Range (4 * 4 = 16)
+                                  if (distanceSq <= 16.0) {
+                                      // 1.6 Attack Speed Cooldown Check
+                                      if (client.player.getAttackCooldownProgress(0.5f) >= 0.9f) {
+                                          client.interactionManager.attackEntity(client.player, target);
+                                          client.player.swingHand(Hand.MAIN_HAND);
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  });
               }
           }
           '''
@@ -104,4 +133,3 @@ jobs:
         with:
           name: target-detector-mod
           path: build/libs/*.jar
-          
