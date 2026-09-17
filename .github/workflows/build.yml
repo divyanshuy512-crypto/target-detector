@@ -29,7 +29,7 @@ jobs:
           sed -i 's/PREFER_SETTINGS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
           sed -i 's/FAIL_ON_PROJECT_REPOS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
 
-      # 4. Overwrite TargetDetectorClient File with Fixed KeyBinding Category
+      # 4. Overwrite TargetDetectorClient File with String Category
       - name: Overwrite TargetDetectorClient File
         run: |
           python3 -c "
@@ -63,7 +63,7 @@ jobs:
                           \"key.targetdetector.toggle\",
                           InputUtil.Type.KEYSYM,
                           GLFW.GLFW_KEY_Z,
-                          KeyBinding.MISC_CATEGORY
+                          \"category.misc\"
                   ));
 
                   ClientTickEvents.END_CLIENT_TICK.register(client -> {
