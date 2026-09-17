@@ -13,7 +13,7 @@ jobs:
 
       - name: Extract Zip Content
         run: |
-          unzip -o *.zip
+          unzip -o *.zip || true
 
       - name: Update Target Version to 1.21.11
         run: |
@@ -26,10 +26,12 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Setup Gradle
+      - name: Setup Gradle 8.8
         uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.8'
 
-      - name: Build with Gradle CLI
+      - name: Build with Gradle
         run: gradle build
 
       - name: Upload Mod Artifact
