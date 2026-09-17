@@ -11,38 +11,95 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. Unzip and Flatten Structure (Fixes ClassNotFoundException)
-      - name: Extract & Flatten Code Base
+      # 1. Extract Project Files
+      - name: Extract Project Files
         run: |
           unzip -o *.zip || true
-          find . -mindepth 2 -type f \( -name "build.gradle" -o -name "settings.gradle" \) -execdir cp -r ./* $GITHUB_WORKSPACE/ \; || true
+          find . -maxdepth 2 -name "build.gradle*" -exec cp -r {}/../* . \; 2>/dev/null || true
 
-      # 2. Update Target Versions for 1.21.11
-      - name: Update Target Versions
+      # 2. Patch Target Versions to 1.21.11
+      - name: Update Target Version to 1.21.11
         run: |
           sed -i 's/1.20.1/1.21.11/g' build.gradle || true
           sed -i 's/0.83.0+1.20.1/0.104.0+1.21.11/g' build.gradle || true
 
-      # 3. Setup JDK 21
+      # 3. Patch Settings Repository Mode
+      - name: Patch Settings Repository Mode
+        run: |
+          sed -i 's/PREFER_SETTINGS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
+          sed -i 's/FAIL_ON_PROJECT_REPOS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
+
+      # 4. Overwrite TargetDetectorClient (Fixed for Minecraft 1.21.11)
+      - name: Overwrite TargetDetectorClient File
+        run: |
+          python3 -c "
+          import os, glob
+
+          content = '''package com.example.targetdetector;
+
+          import net.fabricmc.api.ClientModInitializer;
+          import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+          import net.minecraft.client.MinecraftClient;
+          import net.minecraft.client.gui.DrawContext;
+          import net.minecraft.entity.Entity;
+          import net.minecraft.entity.player.PlayerEntity;
+          import net.minecraft.text.Text;
+          import net.minecraft.client.render.RenderTickCounter;
+
+          public class TargetDetectorClient implements ClientModInitializer {
+
+              @Override
+              public void onInitializeClient() {
+                  HudRenderCallback.EVENT.register((context, tickCounter) -> {
+                      renderHud(context, tickCounter);
+                  });
+              }
+
+              private void renderHud(DrawContext ctx, RenderTickCounter tickCounter) {
+                  MinecraftClient client = MinecraftClient.getInstance();
+                  if (client.player == null || client.world == null) return;
+
+                  Entity target = client.targetedEntity;
+
+                  if (target != null) {
+                      int y = 10;
+                      ctx.drawText(client.textRenderer, Text.literal(\"Target: \" + target.getName().getString()), 10, y, 0xFFFFFF, false);
+                      y += 10;
+                      ctx.drawText(client.textRenderer, Text.literal(\"Type: \" + target.getType().getName().getString()), 10, y, 0xAAAAAA, false);
+                      y += 10;
+                      if (target instanceof PlayerEntity) {
+                          PlayerEntity player = (PlayerEntity) target;
+                          ctx.drawText(client.textRenderer, Text.literal(\"Health: \" + (int) player.getHealth() + \"/\" + (int) player.getMaxHealth()), 10, y, 0xFF5555, false);
+                      }
+                  }
+              }
+          }
+          '''
+
+          files = glob.glob('**/TargetDetectorClient.java', recursive=True)
+          if files:
+              with open(files[0], 'w') as f:
+                  f.write(content)
+              print(f'Successfully updated {files[0]}')
+          "
+
+      # 5. Java & Gradle Setup
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
 
-      # 4. Download and Force Official Gradle 8.8 Standalone Executable
-      - name: Setup Dedicated Gradle 8.8
-        run: |
-          wget -q https://services.gradle.org/distributions/gradle-8.8-bin.zip
-          unzip -q gradle-8.8-bin.zip
-          echo "$GITHUB_WORKSPACE/gradle-8.8/bin" >> $GITHUB_PATH
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '9.2.0'
 
-      # 5. Build Project with System Gradle 8.8
+      # 6. Build and Upload
       - name: Build Mod
         run: gradle build --no-daemon
 
-      # 6. Upload Final Output (.jar)
-      - name: Upload Mod Artifact
+      - name: Upload Mod Jar
         uses: actions/upload-artifact@v4
         with:
           name: target-detector-mod
