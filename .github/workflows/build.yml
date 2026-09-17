@@ -29,7 +29,7 @@ jobs:
           sed -i 's/PREFER_SETTINGS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
           sed -i 's/FAIL_ON_PROJECT_REPOS/PREFER_PROJECT/g' settings.gradle* 2>/dev/null || true
 
-      # 4. Overwrite TargetDetectorClient File with Z Key Toggle
+      # 4. Overwrite TargetDetectorClient File with Fixed KeyBinding Category
       - name: Overwrite TargetDetectorClient File
         run: |
           python3 -c "
@@ -60,10 +60,10 @@ jobs:
               @Override
               public void onInitializeClient() {
                   toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                          \"Toggle Triggerbot\",
+                          \"key.targetdetector.toggle\",
                           InputUtil.Type.KEYSYM,
                           GLFW.GLFW_KEY_Z,
-                          \"Triggerbot Mod\"
+                          KeyBinding.MISC_CATEGORY
                   ));
 
                   ClientTickEvents.END_CLIENT_TICK.register(client -> {
